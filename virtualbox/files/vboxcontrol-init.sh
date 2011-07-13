@@ -61,7 +61,7 @@ start() {
   echo
 
   for VMFILE in ${VBOX_LIST_D}/* ;do
-    [ -e ${VMFILE} ] && VM=`basename ${VMFILE}` || continue
+    [ -e "${VMFILE}" ] && VM=`basename "${VMFILE}"` || continue
     action $"  Starting VM: ${VM} ..." $SU "$VBOXMANAGE startvm "$VM" --type headless >/dev/null 2>/dev/null"
     RETVAL=$?
   done
@@ -103,17 +103,17 @@ status() {
       ip=`$SU "$VBOXMANAGE guestproperty get "${VM}" /VirtualBox/GuestInfo/Net/0/V4/IP" | sed "s/^Value: //"`
       echo $"  ${VM} is running [ip: ${ip}]"
       for (( i = 0 ; i < ${#enabled_vms[@]} ; i++ )); do
-        [ -e ${enabled_vms[$i]} ] || continue
-        vmname=`basename ${enabled_vms[$i]}`
-        if [ $vmname == $VM ]; then
+        [ -e "${enabled_vms[$i]}" ] || continue
+        vmname=`basename "${enabled_vms[$i]}"`
+        if [ "$vmname" == "$VM" ]; then
           unset enabled_vms[$i]
         fi
         unset vmname
       done
     done
     for (( i = 0 ; i < ${#enabled_vms[@]} ; i++ )); do
-      [ -e ${enabled_vms[$i]} ] || continue
-      vmname=`basename ${enabled_vms[$i]}`
+      [ -e "${enabled_vms[$i]}" ] || continue
+      vmname=`basename "${enabled_vms[$i]}"`
       echo $"  ${vmname} is NOT running"
       RETVAL=3
     done
