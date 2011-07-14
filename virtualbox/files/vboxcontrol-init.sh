@@ -62,7 +62,7 @@ start() {
 
   for VMFILE in ${VBOX_LIST_D}/* ;do
     [ -e "${VMFILE}" ] && VM=`basename "${VMFILE}"` || continue
-    action $"  Starting VM: ${VM} ..." $SU "$VBOXMANAGE startvm "$VM" --type headless >/dev/null 2>/dev/null"
+    action $"  Starting VM: ${VM} ..." $SU "$VBOXMANAGE startvm \"$VM\" --type headless >/dev/null 2>/dev/null"
     RETVAL=$?
   done
 
@@ -80,11 +80,19 @@ stop() {
   [ $RETVAL = 0 ] && touch ${lockfile}
   echo
 
-  $SU "$VBOXMANAGE list runningvms" | while read VM VMUUID; do
-    action $"  Stopping VM: ${VM} ..." $SU "$VBOXMANAGE controlvm "$VM" acpipowerbutton >/dev/null 2>/dev/null"
+  orig_ifs=$IFS
+  temp_ifs=$'\n'
+  temp_running_vms=`$SU "$VBOXMANAGE list runningvms" | awk '{ name = $1 } { for( n=2; n<=NF; n++) { if ( n != NF ) { name = name " " $n } } } { print name " " }'`    
+  IFS=$temp_ifs
+  running_vms=( `echo $temp_running_vms` )
+  for VM in ${running_vms[@]}; do
+    VM=`echo $VM | sed 's/"\([^"]*\)".*/\1/'`
+    IFS=$orig_ifs
+    action $"  Stopping VM: ${VM} ..." $SU "$VBOXMANAGE controlvm \"$VM\" acpipowerbutton >/dev/null 2>/dev/null"
+    IFS=$temp_ifs 
     RETVAL=$?
   done
-
+  IFS=$orig_ifs
   action $"  Waiting for VMs to stop ..." wait_for_closing_machines
 
   return $RETVAL
@@ -97,10 +105,16 @@ restart() {
 status() {
     echo $"Checking for running VirtualBox VMs: "
     enabled_vms=( ${VBOX_LIST_D}/* )
-    running_vms=( `$SU "$VBOXMANAGE list runningvms" | awk '{print $1}'` )
+    orig_ifs=$IFS
+    temp_ifs=$'\n'
+    temp_running_vms=`$SU "$VBOXMANAGE list runningvms" | awk '{ name = $1 } { for( n=2; n<=NF; n++) { if ( n != NF ) { name = name " " $n } } } { print name " " }'`    
+    IFS=$temp_ifs
+    running_vms=( `echo $temp_running_vms` )
     for VM in ${running_vms[@]}; do
-      VM=`echo $VM | sed 's/\"//g'`
-      ip=`$SU "$VBOXMANAGE guestproperty get "${VM}" /VirtualBox/GuestInfo/Net/0/V4/IP" | sed "s/^Value: //"`
+      VM=`echo $VM | sed 's/"\([^"]*\)".*/\1/'`
+      IFS=$orig_ifs
+      ip=`$SU "$VBOXMANAGE guestproperty get \"${VM}\" /VirtualBox/GuestInfo/Net/0/V4/IP" | sed "s/^Value: //"`
+      IFS=$temp_ifs
       echo $"  ${VM} is running [ip: ${ip}]"
       for (( i = 0 ; i < ${#enabled_vms[@]} ; i++ )); do
         [ -e "${enabled_vms[$i]}" ] || continue
@@ -111,6 +125,7 @@ status() {
         unset vmname
       done
     done
+    IFS=$orig_ifs
     for (( i = 0 ; i < ${#enabled_vms[@]} ; i++ )); do
       [ -e "${enabled_vms[$i]}" ] || continue
       vmname=`basename "${enabled_vms[$i]}"`
@@ -120,20 +135,20 @@ status() {
 }
 
 startvm(){
-  vmname=$1
+  vmname=$@
   if [ -z "$vmname" ]; then
     echo "ERROR: You need to provide a vm name."
     exit 1
   fi
   
-  action $"Sending start command: ${vmname} ..." $SU "$VBOXMANAGE startvm "$vmname" --type headless >/dev/null 2>/dev/null"
+  action $"Sending start command: ${vmname} ..." $SU "$VBOXMANAGE startvm \"$vmname\" --type headless >/dev/null 2>/dev/null"
   RETVAL=$?
   
   return $RETVAL
 }
 
 deletevm(){
-  vmname=$1
+  vmname=$@
   if [ -z "$vmname" ]; then
     echo "ERROR: You need to provide a vm name."
     exit 1
@@ -144,7 +159,7 @@ deletevm(){
     exit 1
   fi
   
-  action $"Sending unregistervm command: ${vmname} ..." $SU "$VBOXMANAGE unregistervm "$vmname" --delete >/dev/null 2>/dev/null"
+  action $"Sending unregistervm command: ${vmname} ..." $SU "$VBOXMANAGE unregistervm \"$vmname\" --delete >/dev/null 2>/dev/null"
   RETVAL=$?
   
   if [ "${RETVAL}" == 0 ]; then
@@ -156,13 +171,14 @@ deletevm(){
 
 controlvm(){
   command=$1
-  vmname=$2
+  shift
+  vmname=$@
   if [ -z "$vmname" ]; then
     echo "ERROR: You need to provide a vm name."
     exit 1
   fi
   
-  action $"Sending ${command} command: ${vmname} ..." $SU "$VBOXMANAGE controlvm "$vmname" ${command} >/dev/null 2>/dev/null"
+  action $"Sending ${command} command: ${vmname} ..." $SU "$VBOXMANAGE controlvm \"$vmname\" ${command} >/dev/null 2>/dev/null"
   RETVAL=$?
   
   return $RETVAL
@@ -210,3 +226,4 @@ deletevm)
 esac
 
 exit $RETVAL
+
